@@ -1,4 +1,4 @@
-# trash.nvim
+# snakemake.nvim
 Trying to make an nvim plugin
 
 # notes
