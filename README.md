@@ -1,18 +1,10 @@
 # snakemake.nvim
-Trying to make an nvim plugin
+Add keymap update run.sh to force run a snakemake rule.
 
-# notes
-
-```
--- local plugins need to be explicitly configured with dir
-  { dir = "~/projects/secret.nvim" },
-```
-
-* look for lua folder, loads when require it
-* look in plugin folder for stuff that runs on load
-* also special for require: nvim-plugins/trash.nvim/lua/trash/init.lua 
+# install w/ lazyvim
 
 ```
-# loads into cache
-:lua require"trash"
+{
+  "samesense/snakemake.nvim",
+config = function () require("snakemake") vim.keymap.set('n', '<Leader>o', function() require("snakemake").open_and_insert() end ) end},
 ```
