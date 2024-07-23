@@ -1,7 +1,7 @@
 # snakemake.nvim
 Add keymap update run.sh to force run a snakemake rule.
 
-# install w/ lazyvim
+### install w/ lazyvim
 
 ```
 {
