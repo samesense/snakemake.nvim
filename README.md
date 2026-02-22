@@ -42,4 +42,4 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
 3. Press `<Leader>o`
 4. Your `run.sh` will be updated with the forcerun argument inserted after the `snakemake` line
 
-> **Note:** An error is raised if `run.sh` does not contain a `snakemake` line.
+> **Note:** An error is raised if `run.sh` does not contain a line that starts with `snakemake` (optionally preceded by whitespace).
