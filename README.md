@@ -7,14 +7,14 @@ A Neovim plugin that adds a keymap to quickly insert a `--forcerun` argument for
 Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press the keymap, and the plugin will:
 
 1. Extract the rule name from the current line
-2. Open `run.sh` in the current directory
+2. Open `run.sh` in Neovim's current working directory
 3. Insert ` --forcerun my_rule \` on the line after the `snakemake` command
 4. Save the file
 
 ## Requirements
 
 - Neovim
-- A `run.sh` file in your working directory containing a `snakemake` command
+- A `run.sh` file in Neovim's current working directory containing a `snakemake` command
 
 ## Installation
 
