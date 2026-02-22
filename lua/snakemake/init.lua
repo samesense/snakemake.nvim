@@ -22,9 +22,19 @@ M.open_and_insert = function()
 
     -- Open the file run.sh
     vim.cmd('edit run.sh')
-    -- Ensure the buffer is loaded
-    vim.api.nvim_buf_set_lines(0, 3, 3, false, {current_line})
-	--vim.api.nvim_buf_set_lines(0, 3, 3, false, {"--forcerun doit"})
+    -- Find the line containing 'snakemake' and insert forcerun after it
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local insert_at = nil
+    for i, line in ipairs(lines) do
+      if string.match(line, "^%s*snakemake") then
+        insert_at = i  -- insert after this line (i is 1-indexed, buf_set_lines is 0-indexed)
+        break
+      end
+    end
+    if insert_at == nil then
+      error("snakemake not found in run.sh")
+    end
+    vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {current_line})
     -- Optionally, save the file after the modification
     vim.cmd('write')
 end
