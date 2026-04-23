@@ -43,7 +43,7 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
 {
   "samesense/snakemake.nvim",
   config = function()
-    require("snakemake")
+    require("snakemake").setup()
     -- add current rule to --forcerun in run.sh
     vim.keymap.set("n", "<Leader>o", function()
       require("snakemake").open_and_insert()

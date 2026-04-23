@@ -6,65 +6,7 @@ M.example = function()
   -- print("executed trash plugin")
 end
 
-M.setup = function(opts)
-  -- print("setup trash plugin")
-end
-
--- Function to open the file and insert the line
--- 
----@return nil                                                                                                                                                                 
-M.open_and_insert = function()
-    -- Scan upward from the cursor to find the enclosing 'rule <name>:' line
-    local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
-    local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
-    local rule_line = nil
-    for i = #buf_lines, 1, -1 do
-      local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
-      if m then
-        rule_line = m
-        break
-      end
-    end
-    if rule_line == nil then
-      error("no rule definition found above cursor")
-    end
-    local current_line = " --forcerun " .. rule_line .. " \\"
-
-    -- Open the file run.sh
-    vim.cmd('edit run.sh')
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-
-    -- If --forcerun already exists, append the rule name to that line
-    local forcerun_idx = nil
-    for i, line in ipairs(lines) do
-      if string.match(line, "%-%-forcerun") then
-        forcerun_idx = i
-        break
-      end
-    end
-
-    if forcerun_idx ~= nil then
-      -- Strip trailing whitespace and backslash, append new rule, restore backslash
-      local updated = string.gsub(lines[forcerun_idx], "%s*\\%s*$", "")
-      updated = updated .. " " .. rule_line .. " \\"
-      vim.api.nvim_buf_set_lines(0, forcerun_idx - 1, forcerun_idx, false, {updated})
-    else
-      -- No --forcerun yet: insert a new line after the snakemake line
-      local insert_at
-      for i, line in ipairs(lines) do
-        if string.match(line, "snakemake") then
-          insert_at = i
-          break
-        end
-      end
-      if insert_at == nil then
-        error("snakemake not found in run.sh")
-      end
-      vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {current_line})
-    end
-
-    vim.cmd('write')
-end
+-- ── helpers (no inter-dependencies) ──────────────────────────────────────────
 
 -- Returns the quoted string on the current line that the cursor is inside,
 -- falling back to vim's <cfile> expansion.
@@ -115,7 +57,7 @@ local function snakemake_to_lua_pattern(pat)
 end
 
 -- Returns absolute paths of every file under cwd whose basename starts with
--- "Snakemake" (covers Snakefile, Snakemake, Snakemake.rules, etc.).
+-- "Snakemake" or "Snakefile".
 local function find_snakemake_files()
   local cwd = vim.fn.getcwd()
   local found = {}
@@ -195,31 +137,106 @@ local function parse_rules(buf_lines)
   return rules
 end
 
--- Builds a flat list of { name, file, lnum, outputs } by parsing every
--- Snakemake-prefixed file found under the current working directory.
--- The current buffer's content is used in place of disk for its own file so
--- that unsaved edits are visible.
-local function build_rule_index()
-  local cur_file = vim.api.nvim_buf_get_name(0)
-  local all_rules = {}
-  for _, filepath in ipairs(find_snakemake_files()) do
-    local lines
-    if filepath == cur_file then
-      lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    else
-      lines = read_file_lines(filepath)
-    end
-    for _, rule in ipairs(parse_rules(lines)) do
-      rule.file = filepath
-      table.insert(all_rules, rule)
-    end
+-- ── rule index cache ──────────────────────────────────────────────────────────
+
+-- Per-file rule cache: filepath -> list of { name, file, lnum, outputs }.
+-- Populated on setup and updated per-file on BufWritePost.
+local rule_cache = {}
+
+-- (Re)index a single file into rule_cache.
+local function index_file(filepath)
+  local rules = parse_rules(read_file_lines(filepath))
+  for _, rule in ipairs(rules) do
+    rule.file = filepath
   end
-  return all_rules
+  rule_cache[filepath] = rules
+end
+
+-- Populate rule_cache from scratch.  Called once in setup.
+local function build_index()
+  rule_cache = {}
+  for _, f in ipairs(find_snakemake_files()) do
+    index_file(f)
+  end
+end
+
+-- Lazy init: build index on first use if setup was never called explicitly.
+local function ensure_index()
+  if next(rule_cache) == nil then
+    build_index()
+  end
+end
+
+-- ── public API ────────────────────────────────────────────────────────────────
+
+M.setup = function(opts)
+  build_index()
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    pattern  = { "**/Snakemake*", "**/Snakefile*" },
+    callback = function(ev) index_file(ev.file) end,
+    desc     = "Update snakemake.nvim rule index on save",
+  })
+end
+
+-- Function to open the file and insert the line
+--
+---@return nil
+M.open_and_insert = function()
+    -- Scan upward from the cursor to find the enclosing 'rule <name>:' line
+    local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
+    local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
+    local rule_line = nil
+    for i = #buf_lines, 1, -1 do
+      local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
+      if m then
+        rule_line = m
+        break
+      end
+    end
+    if rule_line == nil then
+      error("no rule definition found above cursor")
+    end
+    local current_line = " --forcerun " .. rule_line .. " \\"
+
+    -- Open the file run.sh
+    vim.cmd('edit run.sh')
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+
+    -- If --forcerun already exists, append the rule name to that line
+    local forcerun_idx = nil
+    for i, line in ipairs(lines) do
+      if string.match(line, "%-%-forcerun") then
+        forcerun_idx = i
+        break
+      end
+    end
+
+    if forcerun_idx ~= nil then
+      -- Strip trailing whitespace and backslash, append new rule, restore backslash
+      local updated = string.gsub(lines[forcerun_idx], "%s*\\%s*$", "")
+      updated = updated .. " " .. rule_line .. " \\"
+      vim.api.nvim_buf_set_lines(0, forcerun_idx - 1, forcerun_idx, false, {updated})
+    else
+      -- No --forcerun yet: insert a new line after the snakemake line
+      local insert_at
+      for i, line in ipairs(lines) do
+        if string.match(line, "snakemake") then
+          insert_at = i
+          break
+        end
+      end
+      if insert_at == nil then
+        error("snakemake not found in run.sh")
+      end
+      vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {current_line})
+    end
+
+    vim.cmd('write')
 end
 
 -- Jump to the rule whose output produces the file pattern under the cursor.
--- Searches all Snakemake-prefixed files under cwd.  Opens the file if the
--- match is in a different buffer.
+-- Reads from rule_cache; the cache is built on setup and updated per-file on
+-- BufWritePost, so this never re-parses unless a file changed.
 M.goto_producer = function()
   local target = get_string_under_cursor()
   if not target or target == "" then
@@ -227,17 +244,21 @@ M.goto_producer = function()
     return
   end
 
-  for _, rule in ipairs(build_rule_index()) do
-    for _, out_pat in ipairs(rule.outputs) do
-      local matched = out_pat == target
-        or (out_pat:find("{", 1, true) and target:match(snakemake_to_lua_pattern(out_pat)) ~= nil)
-      if matched then
-        if rule.file ~= vim.api.nvim_buf_get_name(0) then
-          vim.cmd("edit " .. vim.fn.fnameescape(rule.file))
+  ensure_index()
+
+  for _, rules in pairs(rule_cache) do
+    for _, rule in ipairs(rules) do
+      for _, out_pat in ipairs(rule.outputs) do
+        local matched = out_pat == target
+          or (out_pat:find("{", 1, true) and target:match(snakemake_to_lua_pattern(out_pat)) ~= nil)
+        if matched then
+          if rule.file ~= vim.api.nvim_buf_get_name(0) then
+            vim.cmd("edit " .. vim.fn.fnameescape(rule.file))
+          end
+          vim.api.nvim_win_set_cursor(0, { rule.lnum, 0 })
+          vim.notify("rule: " .. rule.name .. "  (" .. vim.fn.fnamemodify(rule.file, ":~:.") .. ")", vim.log.levels.INFO)
+          return
         end
-        vim.api.nvim_win_set_cursor(0, { rule.lnum, 0 })
-        vim.notify("rule: " .. rule.name .. "  (" .. vim.fn.fnamemodify(rule.file, ":~:.") .. ")", vim.log.levels.INFO)
-        return
       end
     end
   end
@@ -245,7 +266,4 @@ M.goto_producer = function()
   vim.notify("no rule found producing: " .. target, vim.log.levels.WARN)
 end
 
--- vim.keymap.set("n", "asd", M.open_and_insert())
-
 return M
-
