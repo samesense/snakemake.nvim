@@ -14,10 +14,20 @@ end
 -- 
 ---@return nil                                                                                                                                                                 
 M.open_and_insert = function()
-	-- Capture the current line and append --forcerun
-    local rule_line = vim.api.nvim_get_current_line()
-	rule_line = string.gsub(rule_line, "rule%s*", "")  -- Removes 'rule' and any following spaces
-	rule_line = string.gsub(rule_line, ":%s*", "")
+    -- Scan upward from the cursor to find the enclosing 'rule <name>:' line
+    local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
+    local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
+    local rule_line = nil
+    for i = #buf_lines, 1, -1 do
+      local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
+      if m then
+        rule_line = m
+        break
+      end
+    end
+    if rule_line == nil then
+      error("no rule definition found above cursor")
+    end
     local current_line = " --forcerun " .. rule_line .. " \\"
 
     -- Open the file run.sh

@@ -4,11 +4,11 @@ A Neovim plugin that adds a keymap to quickly insert a `--forcerun` argument for
 
 ## What it does
 
-Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press the keymap, and the plugin will:
+Place your cursor anywhere inside a Snakemake rule definition, press the keymap, and the plugin will:
 
-1. Extract the rule name from the current line
+1. Scan upward from the cursor to find the enclosing `rule my_rule:` line and extract the rule name
 2. Open `run.sh` in Neovim's current working directory
-3. Insert a `--forcerun my_rule \` line into the file
+3. Insert or update the `--forcerun` argument in the file
 4. Save the file
 
 **First use:** a `--forcerun rule_name \` line is inserted directly after the `snakemake` command.
@@ -39,9 +39,11 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
 ## Usage
 
 1. Open a Snakefile in Neovim
-2. Move your cursor to a rule definition line, e.g.:
+2. Place your cursor anywhere inside a rule — on the `rule` line itself or any line within the rule body:
    ```
    rule my_rule:
+       input: "data.txt"   # cursor can be here too
+       output: "result.txt"
    ```
 3. Press `<Leader>o`
 4. Your `run.sh` will be updated — the rule is inserted after the `snakemake` line on the first use, or appended to the existing `--forcerun` line on subsequent uses
@@ -54,4 +56,4 @@ snakemake \
   --cores 4
 ```
 
-> **Note:** An error is raised if `run.sh` does not contain a `snakemake` line and no `--forcerun` lines are present.
+> **Note:** An error is raised if no `rule` definition is found above the cursor, or if `run.sh` does not contain a `snakemake` line and no `--forcerun` lines are present.
