@@ -114,6 +114,35 @@ local function snakemake_to_lua_pattern(pat)
   return result .. "$"
 end
 
+-- Returns absolute paths of every file under cwd whose basename starts with
+-- "Snakemake" (covers Snakefile, Snakemake, Snakemake.rules, etc.).
+local function find_snakemake_files()
+  local cwd = vim.fn.getcwd()
+  local found = {}
+  local seen = {}
+  for _, pat in ipairs({ "**/Snakemake*", "**/Snakefile*" }) do
+    for _, f in ipairs(vim.fn.glob(cwd .. "/" .. pat, false, true)) do
+      if vim.fn.isdirectory(f) == 0 and not seen[f] then
+        seen[f] = true
+        table.insert(found, f)
+      end
+    end
+  end
+  return found
+end
+
+-- Reads filepath from disk and returns its lines as a table.
+local function read_file_lines(filepath)
+  local lines = {}
+  local fh = io.open(filepath, "r")
+  if not fh then return lines end
+  for line in fh:lines() do
+    table.insert(lines, line)
+  end
+  fh:close()
+  return lines
+end
+
 -- Parses all rule/checkpoint definitions in buf_lines and returns a list of
 -- { name, lnum, outputs } tables.  Only static quoted string literals in
 -- output: blocks are collected; expand() arguments, lambdas, and function
@@ -166,9 +195,31 @@ local function parse_rules(buf_lines)
   return rules
 end
 
--- Jump to the rule (in the current buffer) whose output produces the file
--- pattern under the cursor.  Matches both concrete filenames against wildcard
--- output patterns and exact pattern-to-pattern equality.
+-- Builds a flat list of { name, file, lnum, outputs } by parsing every
+-- Snakemake-prefixed file found under the current working directory.
+-- The current buffer's content is used in place of disk for its own file so
+-- that unsaved edits are visible.
+local function build_rule_index()
+  local cur_file = vim.api.nvim_buf_get_name(0)
+  local all_rules = {}
+  for _, filepath in ipairs(find_snakemake_files()) do
+    local lines
+    if filepath == cur_file then
+      lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    else
+      lines = read_file_lines(filepath)
+    end
+    for _, rule in ipairs(parse_rules(lines)) do
+      rule.file = filepath
+      table.insert(all_rules, rule)
+    end
+  end
+  return all_rules
+end
+
+-- Jump to the rule whose output produces the file pattern under the cursor.
+-- Searches all Snakemake-prefixed files under cwd.  Opens the file if the
+-- match is in a different buffer.
 M.goto_producer = function()
   local target = get_string_under_cursor()
   if not target or target == "" then
@@ -176,24 +227,17 @@ M.goto_producer = function()
     return
   end
 
-  local buf_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local rules = parse_rules(buf_lines)
-
-  for _, rule in ipairs(rules) do
+  for _, rule in ipairs(build_rule_index()) do
     for _, out_pat in ipairs(rule.outputs) do
-      -- exact match (handles wildcard-pattern == wildcard-pattern)
-      if out_pat == target then
-        vim.api.nvim_win_set_cursor(0, { rule.lnum, 0 })
-        vim.notify("rule: " .. rule.name, vim.log.levels.INFO)
-        return
-      end
-      -- wildcard match: concrete filename against a pattern containing {..}
-      if out_pat:find("{", 1, true) then
-        if target:match(snakemake_to_lua_pattern(out_pat)) then
-          vim.api.nvim_win_set_cursor(0, { rule.lnum, 0 })
-          vim.notify("rule: " .. rule.name, vim.log.levels.INFO)
-          return
+      local matched = out_pat == target
+        or (out_pat:find("{", 1, true) and target:match(snakemake_to_lua_pattern(out_pat)) ~= nil)
+      if matched then
+        if rule.file ~= vim.api.nvim_buf_get_name(0) then
+          vim.cmd("edit " .. vim.fn.fnameescape(rule.file))
         end
+        vim.api.nvim_win_set_cursor(0, { rule.lnum, 0 })
+        vim.notify("rule: " .. rule.name .. "  (" .. vim.fn.fnamemodify(rule.file, ":~:.") .. ")", vim.log.levels.INFO)
+        return
       end
     end
   end

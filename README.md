@@ -22,11 +22,11 @@ Place your cursor anywhere inside a Snakemake rule definition, press the keymap,
 Place your cursor on a quoted input filename inside any rule's `input:` block and press the keymap. The plugin will:
 
 1. Extract the file string under the cursor
-2. Scan the entire Snakefile for rules and checkpoints, collecting their `output:` patterns
+2. Scan all `Snakemake*` and `Snakefile*` files under the current working directory, collecting every rule and checkpoint's `output:` patterns
 3. Match the filename against each output pattern — including wildcard patterns like `results/{sample}.bam`
-4. Jump the cursor to the matching rule
+4. Open the file containing the matching rule (if different from the current buffer) and jump to it
 
-Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are supported. For example, with cursor on `"results/sampleA.bam"` in an input block, the plugin will jump to a rule with `output: "results/{sample}.bam"`.
+Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are supported. For example, with cursor on `"results/sampleA.bam"` in an input block, the plugin will jump to a rule with `output: "results/{sample}.bam"`. The rule name and source file are shown in a notification.
 
 > **Note:** Only static quoted strings in `output:` blocks are indexed. `expand()` results, lambdas, and function callbacks are not evaluated.
 
