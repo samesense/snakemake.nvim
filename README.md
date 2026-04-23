@@ -8,8 +8,12 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
 
 1. Extract the rule name from the current line
 2. Open `run.sh` in Neovim's current working directory
-3. Insert ` --forcerun my_rule \` on the line after the `snakemake` command
+3. Insert a `--forcerun my_rule \` line into the file
 4. Save the file
+
+**First use:** the forcerun line is inserted directly after the `snakemake` command.
+
+**Subsequent uses:** if `--forcerun` lines are already present, the new rule is appended after the last one — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
 
 ## Requirements
 
@@ -40,6 +44,16 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
    rule my_rule:
    ```
 3. Press `<Leader>o`
-4. Your `run.sh` will be updated with the forcerun argument inserted after the `snakemake` line
+4. Your `run.sh` will be updated — the rule is inserted after the `snakemake` line on the first use, or appended after the last existing `--forcerun` line on subsequent uses
 
-> **Note:** An error is raised if `run.sh` does not contain a line that starts with `snakemake` (optionally preceded by whitespace).
+For example, after pressing `<Leader>o` three times on different rules:
+
+```sh
+snakemake \
+  --forcerun rule_a \
+  --forcerun rule_b \
+  --forcerun rule_c \
+  --cores 4
+```
+
+> **Note:** An error is raised if `run.sh` does not contain a `snakemake` line and no `--forcerun` lines are present.
