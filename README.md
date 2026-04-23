@@ -11,9 +11,9 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
 3. Insert a `--forcerun my_rule \` line into the file
 4. Save the file
 
-**First use:** the forcerun line is inserted directly after the `snakemake` command.
+**First use:** a `--forcerun rule_name \` line is inserted directly after the `snakemake` command.
 
-**Subsequent uses:** if `--forcerun` lines are already present, the new rule is appended after the last one — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
+**Subsequent uses:** if a `--forcerun` line is already present, the new rule name is appended to it (space-separated) — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
 
 ## Requirements
 
@@ -44,15 +44,13 @@ Place your cursor on a Snakemake rule definition (e.g. `rule my_rule:`), press t
    rule my_rule:
    ```
 3. Press `<Leader>o`
-4. Your `run.sh` will be updated — the rule is inserted after the `snakemake` line on the first use, or appended after the last existing `--forcerun` line on subsequent uses
+4. Your `run.sh` will be updated — the rule is inserted after the `snakemake` line on the first use, or appended to the existing `--forcerun` line on subsequent uses
 
 For example, after pressing `<Leader>o` three times on different rules:
 
 ```sh
 snakemake \
-  --forcerun rule_a \
-  --forcerun rule_b \
-  --forcerun rule_c \
+  --forcerun rule_a rule_b rule_c \
   --cores 4
 ```
 
