@@ -1,12 +1,16 @@
 -- print("loaded trash plugin")
 -- require("trash")
 --
+local util = require("snakemake.util")
+local parse_rules             = util.parse_rules
+local snakemake_to_lua_pattern = util.snakemake_to_lua_pattern
+
 local M = {}
 M.example = function()
   -- print("executed trash plugin")
 end
 
--- ── helpers (no inter-dependencies) ──────────────────────────────────────────
+-- ── helpers ───────────────────────────────────────────────────────────────────
 
 -- Returns the quoted string on the current line that the cursor is inside,
 -- falling back to vim's <cfile> expansion.
@@ -26,34 +30,6 @@ local function get_string_under_cursor()
     pos = qe + 1
   end
   return vim.fn.expand('<cfile>')
-end
-
--- Converts a Snakemake output pattern (e.g. "results/{sample}.bam") into a
--- Lua pattern that matches concrete filenames.  Each {wildcard} (with or
--- without a constraint) becomes [^/]+ so that wildcards don't cross directory
--- boundaries, matching Snakemake's default behaviour.
-local function snakemake_to_lua_pattern(pat)
-  local result = "^"
-  local pos = 1
-  while pos <= #pat do
-    local ws = pat:find("{", pos, true)
-    if ws then
-      local we = pat:find("}", ws + 1, true)
-      if we then
-        local literal = pat:sub(pos, ws - 1)
-        result = result .. literal:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
-        result = result .. "([^/]+)"
-        pos = we + 1
-      else
-        result = result .. pat:sub(pos):gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
-        pos = #pat + 1
-      end
-    else
-      result = result .. pat:sub(pos):gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
-      break
-    end
-  end
-  return result .. "$"
 end
 
 -- Returns absolute paths of every file under cwd whose basename starts with
@@ -83,58 +59,6 @@ local function read_file_lines(filepath)
   end
   fh:close()
   return lines
-end
-
--- Parses all rule/checkpoint definitions in buf_lines and returns a list of
--- { name, lnum, outputs } tables.  Only static quoted string literals in
--- output: blocks are collected; expand() arguments, lambdas, and function
--- callbacks are picked up as their literal string contents where visible.
-local function parse_rules(buf_lines)
-  local rules = {}
-  local current_rule = nil
-  local in_output = false
-
-  local function extract_quoted(line)
-    local found = {}
-    for s in line:gmatch('"([^"]*)"') do
-      if s ~= "" then table.insert(found, s) end
-    end
-    for s in line:gmatch("'([^']*)'") do
-      if s ~= "" then table.insert(found, s) end
-    end
-    return found
-  end
-
-  for lnum, line in ipairs(buf_lines) do
-    local rule_name = line:match("^rule%s+(%S+)%s*:")
-                   or line:match("^checkpoint%s+(%S+)%s*:")
-    if rule_name then
-      current_rule = { name = rule_name, lnum = lnum, outputs = {} }
-      table.insert(rules, current_rule)
-      in_output = false
-    elseif line:match("^%S") then
-      -- non-indented, non-rule line ends the current rule context
-      current_rule = nil
-      in_output = false
-    elseif current_rule then
-      local directive = line:match("^%s+(%a[%w_]*)%s*:")
-      if directive then
-        in_output = (directive == "output")
-        if in_output then
-          -- handle inline form: output: "file.txt"
-          for _, s in ipairs(extract_quoted(line)) do
-            table.insert(current_rule.outputs, s)
-          end
-        end
-      elseif in_output then
-        for _, s in ipairs(extract_quoted(line)) do
-          table.insert(current_rule.outputs, s)
-        end
-      end
-    end
-  end
-
-  return rules
 end
 
 -- ── rule index cache ──────────────────────────────────────────────────────────
