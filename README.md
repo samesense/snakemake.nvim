@@ -1,8 +1,10 @@
 # snakemake.nvim
 
-A Neovim plugin that adds a keymap to quickly insert a `--forcerun` argument for the current Snakemake rule into your `run.sh` file.
+A Neovim plugin with keymaps for working with Snakemake workflows: quickly add `--forcerun` arguments to your `run.sh`, and jump from any input file to the rule that produces it.
 
-## What it does
+## Features
+
+### 1. Add rule to forcerun (`open_and_insert`)
 
 Place your cursor anywhere inside a Snakemake rule definition, press the keymap, and the plugin will:
 
@@ -14,6 +16,19 @@ Place your cursor anywhere inside a Snakemake rule definition, press the keymap,
 **First use:** a `--forcerun rule_name \` line is inserted directly after the `snakemake` command.
 
 **Subsequent uses:** if a `--forcerun` line is already present, the new rule name is appended to it (space-separated) — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
+
+### 2. Go to producer rule (`goto_producer`)
+
+Place your cursor on a quoted input filename inside any rule's `input:` block and press the keymap. The plugin will:
+
+1. Extract the file string under the cursor
+2. Scan all `Snakemake*` and `Snakefile*` files under the current working directory, collecting every rule and checkpoint's `output:` patterns
+3. Match the filename against each output pattern — including wildcard patterns like `results/{sample}.bam`
+4. Open the file containing the matching rule (if different from the current buffer) and jump to it
+
+Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are supported. For example, with cursor on `"results/sampleA.bam"` in an input block, the plugin will jump to a rule with `output: "results/{sample}.bam"`. The rule name and source file are shown in a notification.
+
+> **Note:** Only static quoted strings in `output:` blocks are indexed. `expand()` results, lambdas, and function callbacks are not evaluated.
 
 ## Requirements
 
@@ -28,15 +43,22 @@ Place your cursor anywhere inside a Snakemake rule definition, press the keymap,
 {
   "samesense/snakemake.nvim",
   config = function()
-    require("snakemake")
+    require("snakemake").setup()
+    -- add current rule to --forcerun in run.sh
     vim.keymap.set("n", "<Leader>o", function()
       require("snakemake").open_and_insert()
+    end)
+    -- jump to the rule that produces the file under cursor
+    vim.keymap.set("n", "<Leader>g", function()
+      require("snakemake").goto_producer()
     end)
   end,
 },
 ```
 
 ## Usage
+
+### Adding a rule to forcerun
 
 1. Open a Snakefile in Neovim
 2. Place your cursor anywhere inside a rule — on the `rule` line itself or any line within the rule body:
@@ -57,3 +79,16 @@ snakemake \
 ```
 
 > **Note:** An error is raised if no `rule` definition is found above the cursor, or if `run.sh` does not contain a `snakemake` line and no `--forcerun` lines are present.
+
+### Jumping to a producer rule
+
+1. Open a Snakefile in Neovim
+2. Place your cursor on a quoted filename inside an `input:` block:
+   ```
+   rule final:
+       input: "results/sampleA.bam"   # cursor here
+   ```
+3. Press `<Leader>g`
+4. The cursor jumps to the rule whose `output:` produces that file
+
+Wildcard patterns are matched automatically — a concrete filename like `results/sampleA.bam` will match an output pattern `results/{sample}.bam`. The rule name is shown in a notification on successful navigation.
