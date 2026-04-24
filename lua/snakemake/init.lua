@@ -10,6 +10,8 @@ M.example = function()
   -- print("executed trash plugin")
 end
 
+local augroup = vim.api.nvim_create_augroup("snakemake.nvim", { clear = true })
+
 -- ── helpers ───────────────────────────────────────────────────────────────────
 
 -- Returns the quoted string on the current line that the cursor is inside,
@@ -66,29 +68,57 @@ end
 -- Per-file rule cache: filepath -> list of { name, file, lnum, outputs }.
 -- Populated on setup and updated per-file on BufWritePost.
 local rule_cache = {}
+local indexed_cwd = nil
+
+local function is_snakemake_path(filepath)
+  local basename = vim.fn.fnamemodify(filepath, ":t")
+  return basename:match("^Snakemake") ~= nil or basename:match("^Snakefile") ~= nil
+end
+
+local function in_current_cwd(filepath)
+  local cwd = vim.fn.getcwd()
+  return filepath == cwd or filepath:sub(1, #cwd + 1) == cwd .. "/"
+end
 
 -- (Re)index a single file into rule_cache.
-local function index_file(filepath)
-  local rules = parse_rules(read_file_lines(filepath))
+local function index_lines(filepath, lines)
+  local rules = parse_rules(lines)
   for _, rule in ipairs(rules) do
     rule.file = filepath
   end
   rule_cache[filepath] = rules
 end
 
+local function index_file(filepath)
+  index_lines(filepath, read_file_lines(filepath))
+end
+
 -- Populate rule_cache from scratch.  Called once in setup.
 local function build_index()
   rule_cache = {}
+  indexed_cwd = vim.fn.getcwd()
   for _, f in ipairs(find_snakemake_files()) do
     index_file(f)
   end
 end
 
+local function sync_open_buffers()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) then
+      local filepath = vim.api.nvim_buf_get_name(bufnr)
+      if filepath ~= "" and is_snakemake_path(filepath) and in_current_cwd(filepath) then
+        index_lines(filepath, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+      end
+    end
+  end
+end
+
 -- Lazy init: build index on first use if setup was never called explicitly.
 local function ensure_index()
-  if next(rule_cache) == nil then
+  if indexed_cwd ~= vim.fn.getcwd() or next(rule_cache) == nil then
     build_index()
   end
+  sync_open_buffers()
 end
 
 -- ── public API ────────────────────────────────────────────────────────────────
@@ -96,6 +126,7 @@ end
 M.setup = function(opts)
   build_index()
   vim.api.nvim_create_autocmd("BufWritePost", {
+    group = augroup,
     pattern  = { "**/Snakemake*", "**/Snakefile*" },
     callback = function(ev) index_file(ev.file) end,
     desc     = "Update snakemake.nvim rule index on save",
