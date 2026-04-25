@@ -221,4 +221,36 @@ M.goto_producer = function()
   vim.notify("no rule found producing: " .. target, vim.log.levels.WARN)
 end
 
+-- Populate the quickfix list with every rule across all indexed Snakemake
+-- files and open the quickfix window.  Each entry jumps directly to the
+-- rule definition line when selected.
+M.list_rules = function()
+  ensure_index()
+
+  local items = {}
+  for _, rules in pairs(rule_cache) do
+    for _, rule in ipairs(rules) do
+      table.insert(items, {
+        filename = rule.file,
+        lnum     = rule.lnum,
+        col      = 1,
+        text     = rule.name,
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("no rules found", vim.log.levels.WARN)
+    return
+  end
+
+  table.sort(items, function(a, b)
+    if a.filename ~= b.filename then return a.filename < b.filename end
+    return a.lnum < b.lnum
+  end)
+
+  vim.fn.setqflist({}, "r", { title = "Snakemake rules", items = items })
+  vim.cmd("copen")
+end
+
 return M
