@@ -149,7 +149,8 @@ M.open_and_insert = function()
       end
     end
     if rule_line == nil then
-      error("no rule definition found above cursor")
+      vim.notify("no rule definition found above cursor", vim.log.levels.WARN)
+      return
     end
 
     vim.cmd('edit run.sh')
@@ -189,7 +190,8 @@ M.open_and_insert = function()
       end
     end
     if insert_at == nil then
-      error("snakemake not found in run.sh")
+      vim.notify("snakemake not found in run.sh", vim.log.levels.WARN)
+      return
     end
 
     local consolidated = " --forcerun " .. table.concat(existing_rules, " ") .. " \\"
