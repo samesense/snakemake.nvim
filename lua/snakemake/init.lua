@@ -151,40 +151,49 @@ M.open_and_insert = function()
     if rule_line == nil then
       error("no rule definition found above cursor")
     end
-    local current_line = " --forcerun " .. rule_line .. " \\"
 
-    -- Open the file run.sh
     vim.cmd('edit run.sh')
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
 
-    -- If --forcerun already exists, append the rule name to that line
-    local forcerun_idx = nil
+    -- Collect every rule already listed on any --forcerun line, and remember
+    -- which lines those are so we can drop them.
+    local existing_rules = {}
+    local forcerun_indices = {}
     for i, line in ipairs(lines) do
-      if string.match(line, "%-%-forcerun") then
-        forcerun_idx = i
+      if line:match("%-%-forcerun") then
+        table.insert(forcerun_indices, i)
+        local body = line:gsub("\\%s*$", "")
+        local after = body:match("%-%-forcerun%s+(.*)$")
+        if after then
+          for name in after:gmatch("%S+") do
+            table.insert(existing_rules, name)
+          end
+        end
+      end
+    end
+    table.insert(existing_rules, rule_line)
+
+    -- Drop existing --forcerun lines (reverse order to keep indices stable).
+    for i = #forcerun_indices, 1, -1 do
+      local idx = forcerun_indices[i]
+      vim.api.nvim_buf_set_lines(0, idx - 1, idx, false, {})
+    end
+
+    -- Re-find the snakemake line in the (possibly shortened) buffer.
+    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local insert_at
+    for i, line in ipairs(lines) do
+      if line:match("snakemake") then
+        insert_at = i
         break
       end
     end
-
-    if forcerun_idx ~= nil then
-      -- Strip trailing whitespace and backslash, append new rule, restore backslash
-      local updated = string.gsub(lines[forcerun_idx], "%s*\\%s*$", "")
-      updated = updated .. " " .. rule_line .. " \\"
-      vim.api.nvim_buf_set_lines(0, forcerun_idx - 1, forcerun_idx, false, {updated})
-    else
-      -- No --forcerun yet: insert a new line after the snakemake line
-      local insert_at
-      for i, line in ipairs(lines) do
-        if string.match(line, "snakemake") then
-          insert_at = i
-          break
-        end
-      end
-      if insert_at == nil then
-        error("snakemake not found in run.sh")
-      end
-      vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {current_line})
+    if insert_at == nil then
+      error("snakemake not found in run.sh")
     end
+
+    local consolidated = " --forcerun " .. table.concat(existing_rules, " ") .. " \\"
+    vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {consolidated})
 
     vim.cmd('write')
 end
