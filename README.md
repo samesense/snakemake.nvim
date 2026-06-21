@@ -17,7 +17,11 @@ Place your cursor anywhere inside a Snakemake rule definition, press the keymap,
 
 **Subsequent uses:** if a `--forcerun` line is already present, the new rule name is appended to it (space-separated) — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
 
-### 2. Go to producer rule (`goto_producer`)
+### 2. Rule picker (`list_rules`)
+
+Press the keymap from anywhere and the plugin opens Neovim's built-in quickfix window listing every rule and checkpoint across all `Snakemake*`/`Snakefile*` files in the current working directory. Entries are sorted by file then line number. Navigate with standard quickfix commands (`<CR>` to jump, `:cn`/`:cp` to step through).
+
+### 3. Go to producer rule (`goto_producer`)
 
 Place your cursor on a quoted input filename inside any rule's `input:` block and press the keymap. The plugin will:
 
@@ -48,6 +52,10 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
     vim.keymap.set("n", "<Leader>o", function()
       require("snakemake").open_and_insert()
     end)
+    -- list all rules in the quickfix window
+    vim.keymap.set("n", "<Leader>r", function()
+      require("snakemake").list_rules()
+    end)
     -- jump to the rule that produces the file under cursor
     vim.keymap.set("n", "<Leader>g", function()
       require("snakemake").goto_producer()
@@ -57,6 +65,10 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
 ```
 
 ## Usage
+
+### Browsing all rules
+
+Press `<Leader>r` from anywhere. The quickfix window opens with every rule and checkpoint found across all Snakemake files, sorted by file and line number. Press `<CR>` on any entry to jump to that rule.
 
 ### Adding a rule to forcerun
 
