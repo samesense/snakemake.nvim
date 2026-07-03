@@ -51,6 +51,68 @@ local function find_snakemake_files()
   return found
 end
 
+-- Scan upward from the cursor to find the enclosing `rule <name>:` line and
+-- return the rule name (or nil if none is found).
+local function find_enclosing_rule()
+  local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
+  local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
+  for i = #buf_lines, 1, -1 do
+    local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
+    if m then return m end
+  end
+  return nil
+end
+
+-- Open run.sh, gather all rule names from every --forcerun line, hand them to
+-- `mutator` to transform, then rewrite run.sh with a single consolidated
+-- --forcerun line (or drop the line entirely if the mutator returns an empty
+-- list).  Saves the buffer at the end.
+local function apply_forcerun_change(mutator)
+  vim.cmd('edit run.sh')
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+
+  local rules = {}
+  local forcerun_indices = {}
+  for i, line in ipairs(lines) do
+    if line:match("%-%-forcerun") then
+      table.insert(forcerun_indices, i)
+      local body = line:gsub("\\%s*$", "")
+      local after = body:match("%-%-forcerun%s+(.*)$")
+      if after then
+        for name in after:gmatch("%S+") do
+          table.insert(rules, name)
+        end
+      end
+    end
+  end
+
+  local new_rules = mutator(rules)
+
+  for i = #forcerun_indices, 1, -1 do
+    local idx = forcerun_indices[i]
+    vim.api.nvim_buf_set_lines(0, idx - 1, idx, false, {})
+  end
+
+  if #new_rules > 0 then
+    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local insert_at
+    for i, line in ipairs(lines) do
+      if line:match("snakemake") then
+        insert_at = i
+        break
+      end
+    end
+    if insert_at == nil then
+      vim.notify("snakemake not found in run.sh", vim.log.levels.WARN)
+      return
+    end
+    local consolidated = " --forcerun " .. table.concat(new_rules, " ") .. " \\"
+    vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {consolidated})
+  end
+
+  vim.cmd('write')
+end
+
 -- Reads filepath from disk and returns its lines as a table.
 local function read_file_lines(filepath)
   local lines = {}
@@ -137,67 +199,35 @@ end
 --
 ---@return nil
 M.open_and_insert = function()
-    -- Scan upward from the cursor to find the enclosing 'rule <name>:' line
-    local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
-    local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
-    local rule_line = nil
-    for i = #buf_lines, 1, -1 do
-      local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
-      if m then
-        rule_line = m
-        break
-      end
-    end
-    if rule_line == nil then
+    local rule = find_enclosing_rule()
+    if rule == nil then
       vim.notify("no rule definition found above cursor", vim.log.levels.WARN)
       return
     end
+    apply_forcerun_change(function(rules)
+      table.insert(rules, rule)
+      return rules
+    end)
+end
 
-    vim.cmd('edit run.sh')
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-
-    -- Collect every rule already listed on any --forcerun line, and remember
-    -- which lines those are so we can drop them.
-    local existing_rules = {}
-    local forcerun_indices = {}
-    for i, line in ipairs(lines) do
-      if line:match("%-%-forcerun") then
-        table.insert(forcerun_indices, i)
-        local body = line:gsub("\\%s*$", "")
-        local after = body:match("%-%-forcerun%s+(.*)$")
-        if after then
-          for name in after:gmatch("%S+") do
-            table.insert(existing_rules, name)
-          end
-        end
-      end
+-- Remove the enclosing rule from --forcerun in run.sh.  If the rule is the
+-- only entry, the --forcerun line is dropped entirely.
+M.remove_from_forcerun = function()
+  local rule = find_enclosing_rule()
+  if rule == nil then
+    vim.notify("no rule definition found above cursor", vim.log.levels.WARN)
+    return
+  end
+  apply_forcerun_change(function(rules)
+    local kept = {}
+    for _, r in ipairs(rules) do
+      if r ~= rule then table.insert(kept, r) end
     end
-    table.insert(existing_rules, rule_line)
-
-    -- Drop existing --forcerun lines (reverse order to keep indices stable).
-    for i = #forcerun_indices, 1, -1 do
-      local idx = forcerun_indices[i]
-      vim.api.nvim_buf_set_lines(0, idx - 1, idx, false, {})
+    if #kept == #rules then
+      vim.notify(rule .. " is not in --forcerun", vim.log.levels.INFO)
     end
-
-    -- Re-find the snakemake line in the (possibly shortened) buffer.
-    lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    local insert_at
-    for i, line in ipairs(lines) do
-      if line:match("snakemake") then
-        insert_at = i
-        break
-      end
-    end
-    if insert_at == nil then
-      vim.notify("snakemake not found in run.sh", vim.log.levels.WARN)
-      return
-    end
-
-    local consolidated = " --forcerun " .. table.concat(existing_rules, " ") .. " \\"
-    vim.api.nvim_buf_set_lines(0, insert_at, insert_at, false, {consolidated})
-
-    vim.cmd('write')
+    return kept
+  end)
 end
 
 -- Jump to the rule whose output produces the file pattern under the cursor.
@@ -230,6 +260,38 @@ M.goto_producer = function()
   end
 
   vim.notify("no rule found producing: " .. target, vim.log.levels.WARN)
+end
+
+-- Populate the quickfix list with every rule across all indexed Snakemake
+-- files and open the quickfix window.  Selecting an entry jumps to the rule
+-- definition line.
+M.list_rules = function()
+  ensure_index()
+
+  local items = {}
+  for _, rules in pairs(rule_cache) do
+    for _, rule in ipairs(rules) do
+      table.insert(items, {
+        filename = rule.file,
+        lnum     = rule.lnum,
+        col      = 1,
+        text     = rule.name,
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("no rules found", vim.log.levels.WARN)
+    return
+  end
+
+  table.sort(items, function(a, b)
+    if a.filename ~= b.filename then return a.filename < b.filename end
+    return a.lnum < b.lnum
+  end)
+
+  vim.fn.setqflist({}, "r", { title = "Snakemake rules", items = items })
+  vim.cmd("copen")
 end
 
 return M

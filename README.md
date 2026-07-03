@@ -1,6 +1,6 @@
 # snakemake.nvim
 
-A Neovim plugin with keymaps for working with Snakemake workflows: quickly add `--forcerun` arguments to your `run.sh`, and jump from any input file to the rule that produces it.
+A Neovim plugin with keymaps for working with Snakemake workflows: add or remove `--forcerun` rules in your `run.sh`, jump from any input file to the rule that produces it, and browse every rule in a quickfix picker.
 
 ## Features
 
@@ -17,7 +17,18 @@ Place your cursor anywhere inside a Snakemake rule definition, press the keymap,
 
 **Subsequent uses:** if a `--forcerun` line is already present, the new rule name is appended to it (space-separated) — so you can build up a list of rules to force-rerun without editing `run.sh` by hand.
 
-### 2. Go to producer rule (`goto_producer`)
+### 2. Remove rule from forcerun (`remove_from_forcerun`)
+
+Place your cursor anywhere inside a Snakemake rule, press the keymap, and the plugin will:
+
+1. Scan upward from the cursor to find the enclosing rule name
+2. Open `run.sh` and remove that rule from the `--forcerun` list
+3. If the removed rule was the only one, drop the entire `--forcerun` line
+4. Save
+
+If the rule isn't currently in `--forcerun`, a notification is shown and the list is left unchanged.
+
+### 3. Go to producer rule (`goto_producer`)
 
 Place your cursor on a quoted input filename inside any rule's `input:` block and press the keymap. The plugin will:
 
@@ -29,6 +40,10 @@ Place your cursor on a quoted input filename inside any rule's `input:` block an
 Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are supported. For example, with cursor on `"results/sampleA.bam"` in an input block, the plugin will jump to a rule with `output: "results/{sample}.bam"`. The rule name and source file are shown in a notification.
 
 > **Note:** Only static quoted strings in `output:` blocks are indexed. `expand()` results, lambdas, and function callbacks are not evaluated.
+
+### 4. List all rules (`list_rules`)
+
+Press the keymap to populate Neovim's quickfix window with every rule and checkpoint across all `Snakemake*` / `Snakefile*` files under the current working directory, sorted by file and line number. Select an entry to jump straight to its definition.
 
 ## Requirements
 
@@ -48,9 +63,17 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
     vim.keymap.set("n", "<Leader>o", function()
       require("snakemake").open_and_insert()
     end)
+    -- remove current rule from --forcerun in run.sh
+    vim.keymap.set("n", "<Leader>O", function()
+      require("snakemake").remove_from_forcerun()
+    end)
     -- jump to the rule that produces the file under cursor
     vim.keymap.set("n", "<Leader>g", function()
       require("snakemake").goto_producer()
+    end)
+    -- list every rule in the quickfix window
+    vim.keymap.set("n", "<Leader>r", function()
+      require("snakemake").list_rules()
     end)
   end,
 },
@@ -79,6 +102,19 @@ snakemake \
 ```
 
 > **Note:** An error is raised if no `rule` definition is found above the cursor, or if `run.sh` does not contain a `snakemake` line and no `--forcerun` lines are present.
+
+### Removing a rule from forcerun
+
+1. Open a Snakefile in Neovim
+2. Place your cursor anywhere inside the rule you want out of `--forcerun`
+3. Press `<Leader>O`
+4. `run.sh` is updated: the rule is dropped from the `--forcerun` list; if it was the only entry, the `--forcerun` line is removed entirely
+
+### Listing all rules
+
+1. Open any file in Neovim (a Snakefile isn't required)
+2. Press `<Leader>r`
+3. The quickfix window opens with every rule and checkpoint across all `Snakemake*` / `Snakefile*` files under the current working directory; use `:cnext` / `:cprev` or select an entry to jump to its definition
 
 ### Jumping to a producer rule
 
