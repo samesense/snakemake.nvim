@@ -6,9 +6,9 @@ A Neovim plugin with keymaps for working with Snakemake workflows: quickly add `
 
 ### 1. Add rule to forcerun (`open_and_insert`)
 
-Place your cursor anywhere inside a Snakemake rule definition, press the keymap, and the plugin will:
+Place your cursor anywhere inside a Snakemake rule or checkpoint definition, press the keymap, and the plugin will:
 
-1. Scan upward from the cursor to find the enclosing `rule my_rule:` line and extract the rule name
+1. Scan upward from the cursor to find the enclosing `rule my_rule:` or `checkpoint my_checkpoint:` line and extract the name
 2. Open `run.sh` in Neovim's current working directory
 3. Insert or update the `--forcerun` argument in the file
 4. Save the file
