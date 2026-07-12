@@ -232,4 +232,35 @@ M.goto_producer = function()
   vim.notify("no rule found producing: " .. target, vim.log.levels.WARN)
 end
 
+-- Populate the quickfix list with every rule and checkpoint in the project,
+-- sorted by file then line number, and open the quickfix window.  Selecting
+-- an entry with <CR> jumps to the rule definition.
+M.list_rules = function()
+  ensure_index()
+
+  local items = {}
+  for _, rules in pairs(rule_cache) do
+    for _, rule in ipairs(rules) do
+      table.insert(items, {
+        filename = rule.file,
+        lnum     = rule.lnum,
+        text     = rule.name,
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("no rules found", vim.log.levels.WARN)
+    return
+  end
+
+  table.sort(items, function(a, b)
+    if a.filename ~= b.filename then return a.filename < b.filename end
+    return a.lnum < b.lnum
+  end)
+
+  vim.fn.setqflist({}, " ", { title = "Snakemake rules", items = items })
+  vim.cmd("copen")
+end
+
 return M
