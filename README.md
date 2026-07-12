@@ -30,6 +30,16 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
 
 > **Note:** Only static quoted strings in `output:` blocks are indexed. `expand()` results, lambdas, and function callbacks are not evaluated.
 
+### 3. List all rules (`list_rules`)
+
+Press the keymap from anywhere and the plugin will:
+
+1. Collect every rule and checkpoint from all `Snakemake*` and `Snakefile*` files under the current working directory
+2. Populate the quickfix list with them, sorted by file then line number
+3. Open the quickfix window — selecting an entry with `<CR>` jumps to that rule definition
+
+A warning is shown instead if no rules are found.
+
 ## Requirements
 
 - Neovim
@@ -51,6 +61,10 @@ Both exact matches (pattern equals pattern) and concrete-to-wildcard matches are
     -- jump to the rule that produces the file under cursor
     vim.keymap.set("n", "<Leader>g", function()
       require("snakemake").goto_producer()
+    end)
+    -- list all rules in the quickfix window
+    vim.keymap.set("n", "<Leader>r", function()
+      require("snakemake").list_rules()
     end)
   end,
 },

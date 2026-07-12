@@ -248,6 +248,66 @@ describe("runtime behavior", function()
     assert.equals(resolved(project_dir .. "/Snakefile"), resolved(vim.api.nvim_buf_get_name(0)))
     assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
   end)
+
+  it("lists all rules and checkpoints in the quickfix window", function()
+    local project_dir = temp_root .. "/project"
+    vim.fn.mkdir(project_dir, "p")
+
+    write_file(project_dir .. "/Snakefile", {
+      "rule zeta:",
+      '    output: "z.txt"',
+      "",
+      "checkpoint alpha:",
+      '    output: "a.txt"',
+    })
+    write_file(project_dir .. "/Snakefile.extra", {
+      "rule extra:",
+      '    output: "e.txt"',
+    })
+
+    vim.cmd.cd(project_dir)
+    snakemake.setup()
+    snakemake.list_rules()
+
+    local qf = vim.fn.getqflist({ title = 1, items = 1 })
+    assert.equals("Snakemake rules", qf.title)
+    assert.equals(3, #qf.items)
+
+    -- Sorted by file then line number: Snakefile before Snakefile.extra.
+    assert.same(
+      { "zeta", "alpha", "extra" },
+      vim.tbl_map(function(item) return item.text end, qf.items)
+    )
+    assert.same({ 1, 4, 1 },
+      vim.tbl_map(function(item) return item.lnum end, qf.items))
+
+    -- Quickfix window is open.
+    local qf_open = false
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if vim.fn.getwininfo(win)[1].quickfix == 1 then qf_open = true end
+    end
+    assert.truthy(qf_open)
+    vim.cmd("cclose")
+  end)
+
+  it("warns instead of opening quickfix when no rules exist", function()
+    local project_dir = temp_root .. "/empty"
+    vim.fn.mkdir(project_dir, "p")
+
+    local warned
+    vim.notify = function(msg, level)
+      if level == vim.log.levels.WARN then warned = msg end
+    end
+
+    vim.cmd.cd(project_dir)
+    snakemake.setup()
+    snakemake.list_rules()
+
+    assert.equals("no rules found", warned)
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      assert.falsy(vim.fn.getwininfo(win)[1].quickfix == 1)
+    end
+  end)
 end)
 
 -- ── snakemake_to_lua_pattern ──────────────────────────────────────────────────
