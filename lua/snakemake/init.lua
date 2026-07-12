@@ -137,19 +137,21 @@ end
 --
 ---@return nil
 M.open_and_insert = function()
-    -- Scan upward from the cursor to find the enclosing 'rule <name>:' line
+    -- Scan upward from the cursor to find the enclosing 'rule <name>:' or
+    -- 'checkpoint <name>:' line
     local cursor_row = vim.api.nvim_win_get_cursor(0)[1]  -- 1-indexed
     local buf_lines = vim.api.nvim_buf_get_lines(0, 0, cursor_row, false)
     local rule_line = nil
     for i = #buf_lines, 1, -1 do
       local m = string.match(buf_lines[i], "^rule%s+(%S+)%s*:")
+             or string.match(buf_lines[i], "^checkpoint%s+(%S+)%s*:")
       if m then
         rule_line = m
         break
       end
     end
     if rule_line == nil then
-      vim.notify("no rule definition found above cursor", vim.log.levels.WARN)
+      vim.notify("no rule or checkpoint definition found above cursor", vim.log.levels.WARN)
       return
     end
 

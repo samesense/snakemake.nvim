@@ -248,6 +248,60 @@ describe("runtime behavior", function()
     assert.equals(resolved(project_dir .. "/Snakefile"), resolved(vim.api.nvim_buf_get_name(0)))
     assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
   end)
+
+  local function forcerun_line(project_dir)
+    for _, line in ipairs(vim.fn.readfile(project_dir .. "/run.sh")) do
+      if line:match("%-%-forcerun") then return line end
+    end
+    return nil
+  end
+
+  it("adds the enclosing rule to --forcerun in run.sh", function()
+    local project_dir = temp_root .. "/project"
+    vim.fn.mkdir(project_dir, "p")
+
+    write_file(project_dir .. "/run.sh", {
+      "snakemake \\",
+      "  --cores 4",
+    })
+    write_file(project_dir .. "/Snakefile", {
+      "rule my_rule:",
+      '    output: "out.txt"',
+    })
+
+    vim.cmd.cd(project_dir)
+    snakemake.setup()
+    vim.cmd("edit " .. vim.fn.fnameescape(project_dir .. "/Snakefile"))
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    snakemake.open_and_insert()
+
+    assert.equals(" --forcerun my_rule \\", forcerun_line(project_dir))
+  end)
+
+  it("adds the enclosing checkpoint to --forcerun in run.sh", function()
+    local project_dir = temp_root .. "/project"
+    vim.fn.mkdir(project_dir, "p")
+
+    write_file(project_dir .. "/run.sh", {
+      "snakemake \\",
+      "  --cores 4",
+    })
+    write_file(project_dir .. "/Snakefile", {
+      "rule earlier_rule:",
+      '    output: "a.txt"',
+      "",
+      "checkpoint my_checkpoint:",
+      '    output: "out.txt"',
+    })
+
+    vim.cmd.cd(project_dir)
+    snakemake.setup()
+    vim.cmd("edit " .. vim.fn.fnameescape(project_dir .. "/Snakefile"))
+    vim.api.nvim_win_set_cursor(0, { 5, 0 })
+    snakemake.open_and_insert()
+
+    assert.equals(" --forcerun my_checkpoint \\", forcerun_line(project_dir))
+  end)
 end)
 
 -- ── snakemake_to_lua_pattern ──────────────────────────────────────────────────
