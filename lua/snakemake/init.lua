@@ -174,6 +174,22 @@ M.open_and_insert = function()
     end
     table.insert(existing_rules, rule_line)
 
+    -- Verify run.sh has a snakemake line before mutating the buffer, so a
+    -- bailout doesn't silently drop the existing --forcerun list.
+    local forcerun_set = {}
+    for _, i in ipairs(forcerun_indices) do forcerun_set[i] = true end
+    local has_snakemake = false
+    for i, line in ipairs(lines) do
+      if not forcerun_set[i] and line:match("snakemake") then
+        has_snakemake = true
+        break
+      end
+    end
+    if not has_snakemake then
+      vim.notify("snakemake not found in run.sh", vim.log.levels.WARN)
+      return
+    end
+
     -- Drop existing --forcerun lines (reverse order to keep indices stable).
     for i = #forcerun_indices, 1, -1 do
       local idx = forcerun_indices[i]

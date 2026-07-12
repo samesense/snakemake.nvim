@@ -248,6 +248,40 @@ describe("runtime behavior", function()
     assert.equals(resolved(project_dir .. "/Snakefile"), resolved(vim.api.nvim_buf_get_name(0)))
     assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
   end)
+
+  it("keeps existing --forcerun lines when run.sh has no snakemake line", function()
+    local project_dir = temp_root .. "/project"
+    vim.fn.mkdir(project_dir, "p")
+
+    write_file(project_dir .. "/run.sh", {
+      "#!/bin/bash",
+      " --forcerun old_rule \\",
+      "  --cores 4",
+    })
+    write_file(project_dir .. "/Snakefile", {
+      "rule my_rule:",
+      '    output: "out.txt"',
+    })
+
+    local warned
+    vim.notify = function(msg, level)
+      if level == vim.log.levels.WARN then warned = msg end
+    end
+
+    vim.cmd.cd(project_dir)
+    snakemake.setup()
+    vim.cmd("edit " .. vim.fn.fnameescape(project_dir .. "/Snakefile"))
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    snakemake.open_and_insert()
+
+    assert.equals("snakemake not found in run.sh", warned)
+    -- The run.sh buffer must be untouched: forcerun line intact, not modified.
+    assert.same(
+      { "#!/bin/bash", " --forcerun old_rule \\", "  --cores 4" },
+      vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    )
+    assert.falsy(vim.bo.modified)
+  end)
 end)
 
 -- ── snakemake_to_lua_pattern ──────────────────────────────────────────────────
